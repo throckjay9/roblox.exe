@@ -11,10 +11,20 @@ local LocalPlayer = Players.LocalPlayer
 local Mouse = LocalPlayer:GetMouse()
 
 -- Configuration
-local ESPEnabled = true
-local AimbotEnabled = false  -- Default off, you can toggle later via GUI if you want
+local ESPConfig = {
+    Antenna = true,
+    ESPLines = true,
+    ESPBoxes = true,
+}
+local AimbotEnabled = false  -- Default off, toggle via GUI
 local AimbotFOV = 80 -- degrees
-local AimPartName = "Head" -- Part to aim at
+local AimPartName = "Head" -- Aim at head only
+
+-- Check if GUI already exists to prevent duplication
+local existingGui = game.CoreGui:FindFirstChild("FreeFireMaxAimbotGUI")
+if existingGui then
+    existingGui:Destroy()
+end
 
 -- GUI Setup
 local ScreenGui = Instance.new("ScreenGui")
@@ -25,8 +35,8 @@ ScreenGui.Parent = game.CoreGui
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 280, 0, 140)
-MainFrame.Position = UDim2.new(0.5, -140, 0.5, -70)
+MainFrame.Size = UDim2.new(0, 280, 0, 170)
+MainFrame.Position = UDim2.new(0.5, -140, 0.5, -85)
 MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 MainFrame.BorderSizePixel = 0
 MainFrame.Parent = ScreenGui
@@ -90,6 +100,7 @@ local function CreateCheckbox(name, position, default)
     CheckBox.MouseButton1Click:Connect(function()
         checked = not checked
         CheckMark.Visible = checked
+
         if name == "ESP Antenna" then
             ESPConfig.Antenna = checked
         elseif name == "ESP Line" then
@@ -104,35 +115,23 @@ local function CreateCheckbox(name, position, default)
     return CheckFrame
 end
 
--- ESP Configuration Holders
-local ESPConfig = {
-    Antenna = true,
-    ESPLines = true,
-    ESPBoxes = true,
-}
-
 -- Create checkboxes
 local antennaCheckbox = CreateCheckbox("ESP Antenna", UDim2.new(0, 10, 0, 40), true)
 local espLineCheckbox = CreateCheckbox("ESP Line", UDim2.new(0, 10, 0, 70), true)
 local espBoxCheckbox = CreateCheckbox("ESP Box", UDim2.new(0, 10, 0, 100), true)
 local aimbotCheckbox = CreateCheckbox("Aimbot", UDim2.new(0, 10, 0, 130), false)
 
--- Position correction to fit frame height
-MainFrame.Size = UDim2.new(0, 280, 0, 170)
+-- GUI Toggle
+local guiEnabled = false
+ScreenGui.Enabled = guiEnabled
 
--- Toggle GUI on F press
-local guiEnabled = true
-
-local UserInputToggleConnection
-UserInputToggleConnection = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.KeyCode == Enum.KeyCode.F then
         guiEnabled = not guiEnabled
         ScreenGui.Enabled = guiEnabled
     end
 end)
-
-ScreenGui.Enabled = guiEnabled
 
 -- Drawing helper functions and objects
 local drawingNew = Drawing and Drawing.new or nil
@@ -196,7 +195,7 @@ local function GetClosestTarget()
     local centerX, centerY = camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2
 
     for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild(AimPartName) and player.Character.Humanoid.Health > 0 then
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild(AimPartName) and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
             local part = player.Character[AimPartName]
             local pos, onScreen = camera:WorldToViewportPoint(part.Position)
             if onScreen then
@@ -213,7 +212,7 @@ local function GetClosestTarget()
     return closestPlayer
 end
 
--- Aimbot aiming function
+-- Aimbot aiming function focusing on head
 local function AimAt(target)
     if not target or not target.Character or not target.Character:FindFirstChild(AimPartName) then return end
     local camera = workspace.CurrentCamera
@@ -222,14 +221,14 @@ local function AimAt(target)
     local pos, onScreen = camera:WorldToViewportPoint(part.Position)
     if not onScreen then return end
 
-    -- Smooth aim movement
+    -- Smooth aim movement with lerp
     local mouseLocation = Vector2.new(UserInputService:GetMouseLocation().X, UserInputService:GetMouseLocation().Y)
     local targetPos = Vector2.new(pos.X, pos.Y)
     local delta = targetPos - mouseLocation
     local smoothFactor = 0.3 -- smaller is faster
 
     local newMousePos = mouseLocation + delta * smoothFactor
-    -- Robotically set mouse position is not supported in Roblox, but we can simulate camera rotation as a hack:
+    -- Move camera towards newMousePos
     local cameraCF = camera.CFrame
     local ray = camera:ScreenPointToRay(newMousePos.X, newMousePos.Y)
     local direction = ray.Direction
@@ -247,7 +246,6 @@ local function UpdateESP()
             local character = player.Character
             local esp = CreateESPForPlayer(player)
 
-            -- Head position (antenna start)
             local head = character:FindFirstChild("Head")
             if not head then
                 if esp.Box then esp.Box.Visible = false end
@@ -263,16 +261,13 @@ local function UpdateESP()
                 continue
             end
 
-            -- 3D positions
             local headPos = head.Position
             local rootPos = rootPart.Position
 
-            -- Project positions to screen
             local headPos2D, headOnScreen = camera:WorldToViewportPoint(headPos)
             local rootPos2D, rootOnScreen = camera:WorldToViewportPoint(rootPos)
 
             if ESPConfig.ESPBoxes and esp.Box and headOnScreen and rootOnScreen then
-                -- Calculate size of box based on distance between head and root
                 local boxHeight = math.abs(headPos2D.Y - rootPos2D.Y)
                 local boxWidth = boxHeight / 2
                 esp.Box.Size = boxHeight
@@ -293,7 +288,6 @@ local function UpdateESP()
             end
 
             if ESPConfig.Antenna and esp.Antenna and headOnScreen then
-                -- Antenna line from head up 5 studs
                 local antennaTopPos = headPos + Vector3.new(0, 5, 0)
                 local antennaTop2D, topOnScreen = camera:WorldToViewportPoint(antennaTopPos)
                 if topOnScreen then
@@ -307,9 +301,7 @@ local function UpdateESP()
             else
                 if esp.Antenna then esp.Antenna.Visible = false end
             end
-
         else
-            -- Hide ESP if player is dead or no character
             local esp = ESPObjects[player]
             if esp then
                 if esp.Box then esp.Box.Visible = false end
@@ -322,16 +314,7 @@ end
 
 -- Main Loop
 RunService.RenderStepped:Connect(function()
-    if ESPEnabled then
-        UpdateESP()
-    else
-        -- Hide all ESP when disabled
-        for _, esp in pairs(ESPObjects) do
-            if esp.Box then esp.Box.Visible = false end
-            if esp.Line then esp.Line.Visible = false end
-            if esp.Antenna then esp.Antenna.Visible = false end
-        end
-    end
+    UpdateESP()
     if AimbotEnabled then
         local target = GetClosestTarget()
         if target then
@@ -349,11 +332,6 @@ local function Cleanup()
         if esp.Antenna then esp.Antenna.Visible = false; esp.Antenna:Remove() end
     end
     ESPObjects = {}
-    UserInputToggleConnection:Disconnect()
 end
 
--- Bind cleanup to game close or script unload if needed
--- (Not strictly necessary here)
-
 print("Free Fire Max Aimbot & ESP script loaded. Press F to toggle GUI.")
-
