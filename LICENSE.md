@@ -10,6 +10,7 @@ local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 local Mouse = LocalPlayer:GetMouse()
 &nbsp;
 &nbsp;
@@ -27,7 +28,7 @@ local AimPartName = "Head" -- Aim at head only
 &nbsp;
 
 -- Check if GUI already exists to prevent duplication
-local existingGui = game.CoreGui:FindFirstChild("FreeFireMaxAimbotGUI")
+local existingGui = PlayerGui:FindFirstChild("FreeFireMaxAimbotGUI")
 if existingGui then
     existingGui:Destroy()
 end
@@ -39,7 +40,8 @@ local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "FreeFireMaxAimbotGUI"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.DisplayOrder = 1000
-ScreenGui.Parent = game.CoreGui
+ScreenGui.Parent = PlayerGui
+ScreenGui.Enabled = false -- Start hidden
 &nbsp;
 &nbsp;
 
